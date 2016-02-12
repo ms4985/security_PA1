@@ -21,13 +21,14 @@ if ((port < 1024) or (port > 49151)):
 	print 'ERROR: invalid port'
 	sys.exit
 
+#generate rsa key pair ans save to files
 rsa_keys = RSA.generate(2048)
 pubkey = rsa_keys.publickey().exportKey("PEM")
 with open('c_pubkey.pem', 'w') as f:
 	f.write(pubkey)
 privkey = rsa_keys.exportKey("PEM")
-
-print pubkey, privkey
+with open('c_privkey.pem', 'w') as f:
+	f.write(privkey)
 
 key = 'a1b2c3d4e5f6g7h8' #sys.argv[3]
 if len(key) != 16:
@@ -36,6 +37,13 @@ if len(key) != 16:
 
 fname = 'file1.txt' #sys.argv[4]
 ename = 'en' + fname
+
+def encrypt_key():
+	with open('s_pubkey.pem', 'r') as f:
+		k = f.read()
+		server_key = RSA.importKey(k)
+	encrypted = server_key.encrypt(key, 16)
+	return encrypted
 
 #set up AES encryption
 iv = urandom(BLOCK_SIZE)
@@ -93,7 +101,7 @@ while 1:
 					print data
 					if sent == False:
 						sock.send('key')
-						sock.send(key)
+						sock.send(encrypt_key()[0])
 						encrypt_file()
 						sock.send('file')
 						send_file(sock)

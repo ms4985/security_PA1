@@ -1,4 +1,5 @@
 from Crypto.Cipher import AES
+from Crypto.PublicKey import RSA
 import socket
 import sys
 import select
@@ -14,6 +15,15 @@ host, port = '', int(sys.argv[1])
 if ((port < 1024) or (port > 49151)):
 	print 'ERROR: invalid port'
 	sys.exit
+
+#generate rsa key pairs and save to files
+rsa_keys = RSA.generate(2048)
+pubkey = rsa_keys.publickey().exportKey("PEM")
+with open('s_pubkey.pem', 'w') as f:
+	f.write(pubkey)
+privkey = rsa_keys.exportKey("PEM")
+with open('s_privkey.pem', 'w') as f:
+	f.write(privkey)
 
 #set up server socket
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -49,7 +59,7 @@ def handle_client(sock, address):
 def handle_key(sock):
 	data = sock.recv(SIZE)
 	global KEY
-	KEY = data
+	KEY = privkey.decrypt(data)
 
 def handle_file(sock):
 	with open('encfile', 'wb') as f:
