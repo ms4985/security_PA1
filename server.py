@@ -15,6 +15,7 @@ if ((port < 1024) or (port > 49151)):
 	print 'ERROR: invalid port'
 	sys.exit
 
+#set up server socket
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((host,port))
 print "server is running on: ", socket.gethostbyname(socket.gethostname())
@@ -22,22 +23,33 @@ server.listen(5)
 print "server listening for clients..."
 connections.append(server)
 
+#handles receiving data from the client
 def handle_client(sock, address):
 	try:
 		try:
 			data = sock.recv(SIZE)
 			if data:
 				print data
-			if data == 'close':
+			#client has exited so cleanup
+			if data == 'bye':
 				connections.remove(sock)
 				sock.close()
+			#client is about to send the key
+			if data == 'key':
+				handle_key(sock)
+			#client is about to send the file
 			if data == 'file':
 				handle_file(sock)
 				decrypt_file()
-		except:
-			close(sock)
+		finally:
+			print 'handled client'
 	except:
 		pass
+
+def handle_key(sock):
+	data = sock.recv(SIZE)
+	global KEY
+	KEY = data
 
 def handle_file(sock):
 	with open('encfile', 'wb') as f:
@@ -46,16 +58,15 @@ def handle_file(sock):
 	print 'received file'
 
 def decrypt_file():
-	key = 'a1b2c3d4e5f6g7h8'
 	with open('encfile', 'rb') as e:
 		iv = e.read(BLOCK_SIZE)
-		decryptor = AES.new(key, mode, iv)
+		decryptor = AES.new(KEY, mode, IV=iv)
 		with open('decfile', 'wb') as d:
 			stop = False
 			while stop == False:
 				segment = e.read(BLOCK_SIZE)
 				if len(segment) == 0:
-					stop == True
+					stop = True
 				d.write(decryptor.decrypt(segment))	
 
 def close(socket):
@@ -75,7 +86,7 @@ try:
 				try:
 					handle_client(socket, address)
 				except:
-					close(sock)
+					sock.close()
 
 except (KeyboardInterrupt, SystemExit):
 	print "\n server shutting down..."

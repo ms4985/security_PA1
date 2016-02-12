@@ -1,4 +1,5 @@
 from Crypto.Cipher import AES
+from Crypto.PublicKey import RSA
 import socket
 import sys
 import select
@@ -19,6 +20,14 @@ host, port = sys.argv[1], int(sys.argv[2])
 if ((port < 1024) or (port > 49151)):
 	print 'ERROR: invalid port'
 	sys.exit
+
+rsa_keys = RSA.generate(2048)
+pubkey = rsa_keys.publickey().exportKey("PEM")
+with open('c_pubkey.pem', 'w') as f:
+	f.write(pubkey)
+privkey = rsa_keys.exportKey("PEM")
+
+print pubkey, privkey
 
 key = 'a1b2c3d4e5f6g7h8' #sys.argv[3]
 if len(key) != 16:
@@ -68,6 +77,7 @@ def send_file(sock):
 	with open(ename, 'rb') as f:
 		data = f.read(SIZE)
 		sock.send(data)
+	print 'done sending'
 
 sent = False
 
@@ -81,11 +91,13 @@ while 1:
 				data = sock.recv(SIZE)
 				if data:
 					print data
-				if sent == False:
-					encrypt_file()
-					sock.send('file')
-					send_file(sock)
-					sent == True
+					if sent == False:
+						sock.send('key')
+						sock.send(key)
+						encrypt_file()
+						sock.send('file')
+						send_file(sock)
+						sent == True
 
 				#exit if server quit
 				else:
@@ -99,7 +111,7 @@ while 1:
 
 	#catch crtl-c interrupts
 	except (KeyboardInterrupt, SystemExit):
-		client.send('close')
+		client.send('bye')
 		client.close()
 		sys.exit()
 
