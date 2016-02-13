@@ -3,6 +3,7 @@ from Crypto.PublicKey import RSA
 import socket
 import sys
 import select
+import pickle
 
 #globals
 SIZE = 4096
@@ -49,8 +50,11 @@ def handle_client(sock, address):
 				handle_key(sock)
 			#client is about to send the file
 			if data == 'file':
-				handle_file(sock)
-				decrypt_file()
+				x = handle_file(sock)
+				decrypt_file(x)
+			#client is about to send the signature
+			if data == 'signature':
+				handle_sig()
 		finally:
 			print 'handled client'
 	except:
@@ -58,26 +62,35 @@ def handle_client(sock, address):
 
 def handle_key(sock):
 	data = sock.recv(SIZE)
+	data = pickle.loads(data)
 	global KEY
-	KEY = privkey.decrypt(data)
+	with open('s_privkey.pem', 'r') as f:
+		p = f.read()
+		pk = RSA.importKey(p)
+	KEY = pk.decrypt(data)
+	print 'key: ', KEY
 
 def handle_file(sock):
-	with open('encfile', 'wb') as f:
-		data = sock.recv(SIZE)
-		f.write(data)
+	data = sock.recv(SIZE)
 	print 'received file'
+	return data
 
-def decrypt_file():
-	with open('encfile', 'rb') as e:
-		iv = e.read(BLOCK_SIZE)
-		decryptor = AES.new(KEY, mode, IV=iv)
-		with open('decfile', 'wb') as d:
-			stop = False
-			while stop == False:
-				segment = e.read(BLOCK_SIZE)
-				if len(segment) == 0:
-					stop = True
-				d.write(decryptor.decrypt(segment))	
+def decrypt_file(ctxt):
+	size = ctxt[:16]
+	iv = ctxt[16:32]
+	ctxt = ctxt[32:]
+	print 'about to decrypt'
+	decryptor = AES.new(KEY, mode, iv)
+	plain = decryptor.decrypt(ctxt)
+	print 'done decrypting'
+	plain = plain[:int(size)]
+	with open('decfile', 'wb') as f:
+		f.write(plain)
+
+def handle_sig():
+	data = sock.recv(SIZE)
+	data = pickle.loads(data)
+	print data	
 
 def close(socket):
 	print 'close'

@@ -1,9 +1,11 @@
 from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
+from Crypto.Hash import SHA256
 import socket
 import sys
 import select
 from os import urandom
+import pickle
 
 #globals
 SIZE = 4096
@@ -30,7 +32,7 @@ privkey = rsa_keys.exportKey("PEM")
 with open('c_privkey.pem', 'w') as f:
 	f.write(privkey)
 
-key = 'a1b2c3d4e5f6g7h8' #sys.argv[3]
+key = 'a1b2c3d4e5f6g7h9' #sys.argv[3]
 if len(key) != 16:
 	print 'ERROR: password not 16 characters'
 	sys.exit()
@@ -49,27 +51,47 @@ def encrypt_key():
 iv = urandom(BLOCK_SIZE)
 mode = AES.MODE_CBC
 
-#function for encrypting file using AES in CBC mode
 def encrypt_file():
-	encryptor = AES.new(key, mode, IV=iv)
-	
-	#read file in rb mode
+	encryptor = AES.new(key, mode, iv)
 	with open(fname, 'rb') as f:
-		#open file to write encrypted file in wb mode
-		with open(ename, 'wb') as e:
-			#prepend the iv string to the ciphertext
-			e.write(iv)
-			stop = False
-			while stop == False:
-				segment = f.read(BLOCK_SIZE)
-				#check if reached EOF
-				if len(segment) == 0:
-					stop = True
-				#check if we need to pad the last segment
-				elif len(segment) < 16:
-					segment += ' '*(16-len(segment))
-				e.write(encryptor.encrypt(segment))
+		plaintext = f.read()
+	S = len(plaintext)
+	L = S % BLOCK_SIZE
+	if L < 16:
+		plaintext+=' '*(16-L)
+	length = str(S) + ' '*(16-len(str(S)))
+	ciphertext = length + iv
+	ciphertext += encryptor.encrypt(plaintext)
+	return ciphertext
 
+def hash_file():
+	with open(fname, 'rb') as f:
+		plaintext = f.read()
+	h = SHA256.new(plaintext)
+	print h.hexdigest()
+	return h
+
+def encrypt_hash(hash):
+	with open('c_privkey.pem', 'r') as f:
+		pk = f.read()
+		pk = RSA.importKey(pk)
+	enhash = pk.encrypt(hash.hexdigest(), 32)
+	return enhash
+"""
+def decrypt_hash(enc):
+	with open('c_privkey.pem', 'r') as f:
+		pk = f.read()
+		pk = RSA.importKey(pk)
+	dehash = pk.decrypt(enc)
+	return dehash
+
+h = hash_file()
+x = encrypt_hash(h)
+print x
+y = decrypt_hash(x)
+print y
+
+"""
 #set up client socket
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -80,12 +102,6 @@ try:
 except:
 	print "no server on host/port"
 	sys.exit()
-
-def send_file(sock):
-	with open(ename, 'rb') as f:
-		data = f.read(SIZE)
-		sock.send(data)
-	print 'done sending'
 
 sent = False
 
@@ -101,10 +117,18 @@ while 1:
 					print data
 					if sent == False:
 						sock.send('key')
-						sock.send(encrypt_key()[0])
-						encrypt_file()
+						ek = encrypt_key()
+						ek = pickle.dumps(ek)
+						sock.send(ek)
+						ctxt = encrypt_file()
 						sock.send('file')
-						send_file(sock)
+						sock.send(ctxt)
+						sock.send('signature')
+						h = hash_file()
+						enchash = encrypt_hash(h)
+						print enchash
+						enchash = pickle.dumps(enchash)
+						sock.send(enchash)
 						sent == True
 
 				#exit if server quit
