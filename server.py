@@ -1,5 +1,6 @@
 from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
+from Crypto.Hash import SHA256
 import socket
 import sys
 import select
@@ -9,13 +10,22 @@ import pickle
 SIZE = 4096
 BLOCK_SIZE = 16
 connections = []
-mode = AES.MODE_CBC
+aes_mode = AES.MODE_CBC
 
 #handle user input
+if len(sys.argv) != 3:
+	print 'ERROR: not enough arguments'
+	sys.exit()
+
 host, port = '', int(sys.argv[1])
 if ((port < 1024) or (port > 49151)):
 	print 'ERROR: invalid port'
-	sys.exit
+	sys.exit()
+
+mode = sys.argv[2]
+if ((mode != 't') and (mode != 'u')):
+	print 'ERROR: invalid mode'
+	sys.exit()
 
 #generate rsa key pairs and save to files
 rsa_keys = RSA.generate(2048)
@@ -35,29 +45,27 @@ print "server listening for clients..."
 connections.append(server)
 
 #handles receiving data from the client
+#client sends a keyword first to the server
+#then the server responds accordingly with the correct helper fn
 def handle_client(sock, address):
 	try:
-		try:
-			data = sock.recv(SIZE)
-			if data:
-				print data
-			#client has exited so cleanup
-			if data == 'bye':
-				connections.remove(sock)
-				sock.close()
-			#client is about to send the key
-			if data == 'key':
-				handle_key(sock)
-			#client is about to send the file
-			if data == 'file':
-				x = handle_file(sock)
-				decrypt_file(x)
-			#client is about to send the signature
-			if data == 'signature':
-				handle_sig()
-		finally:
-			print 'handled client'
+		data = sock.recv(SIZE)
+		#client has exited so cleanup
+		if data == 'bye':
+			connections.remove(sock)
+			sock.close()
+			print 'client disconnected'
+		#client is about to send the key
+		if data == 'key':
+			handle_key(sock)
+		#client is about to send the file
+		if data == 'file':
+			handle_file(sock)
+		#client is about to send the signature
+		if data == 'signature':
+			handle_sig()
 	except:
+		#no data received by client so move on
 		pass
 
 def handle_key(sock):
@@ -68,29 +76,35 @@ def handle_key(sock):
 		p = f.read()
 		pk = RSA.importKey(p)
 	KEY = pk.decrypt(data)
-	print 'key: ', KEY
 
 def handle_file(sock):
-	data = sock.recv(SIZE)
-	print 'received file'
-	return data
-
-def decrypt_file(ctxt):
-	size = ctxt[:16]
-	iv = ctxt[16:32]
-	ctxt = ctxt[32:]
-	print 'about to decrypt'
-	decryptor = AES.new(KEY, mode, iv)
+	ctxt = sock.recv(SIZE)
+	size = ctxt[:BLOCK_SIZE]
+	iv = ctxt[BLOCK_SIZE:BLOCK_SIZE*2]
+	ctxt = ctxt[BLOCK_SIZE*2:]
+	decryptor = AES.new(KEY, aes_mode, iv)
+	global plain
+	if mode == 'u':
+		with open('fakefile', 'rb') as f:
+			ctxt = f.read()
 	plain = decryptor.decrypt(ctxt)
-	print 'done decrypting'
 	plain = plain[:int(size)]
-	with open('decfile', 'wb') as f:
+	with open('decryptedfile', 'wb') as f:
 		f.write(plain)
 
 def handle_sig():
 	data = sock.recv(SIZE)
 	data = pickle.loads(data)
-	print data	
+	with open('c_privkey.pem', 'r') as f:
+		pk = f.read()
+		pk = RSA.importKey(pk)
+	dehash = pk.decrypt(data)
+	h = SHA256.new(plain)
+	if (h.hexdigest() == dehash):
+		print 'Verification Passed'
+	else:
+		print 'Verficiation Failed'
+		
 
 def close(socket):
 	print 'close'
@@ -105,6 +119,7 @@ try:
 				socket, address = server.accept()
 				socket.sendto("connected!", address)
 				connections.append(socket)
+				print 'client connected'
 			else:
 				try:
 					handle_client(socket, address)
@@ -112,6 +127,6 @@ try:
 					sock.close()
 
 except (KeyboardInterrupt, SystemExit):
-	print "\n server shutting down..."
+	print "\nserver shutting down..."
 	server.close()
 	sys.exit()

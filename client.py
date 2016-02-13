@@ -6,22 +6,40 @@ import sys
 import select
 from os import urandom
 import pickle
+import time
 
 #globals
 SIZE = 4096
 BLOCK_SIZE = 16
 
+#set up AES encryption
+iv = urandom(BLOCK_SIZE)
+mode = AES.MODE_CBC
+
 #CHANGE WHEN ADDING REST OF INPUT ARGS
-if len(sys.argv) < 3:
+if len(sys.argv) != 5:
 	print 'ERROR: not enough arguments'
 	sys.exit()
 
-
 #handle user inputs
-host, port = sys.argv[1], int(sys.argv[2])
+host = sys.argv[1]
+try:
+	socket.inet_aton(host)
+except:
+	print 'ERROR: invalid ip address'
+	sys.exit()
+
+port = int(sys.argv[2])
 if ((port < 1024) or (port > 49151)):
 	print 'ERROR: invalid port'
-	sys.exit
+	sys.exit()
+
+key = sys.argv[3]
+if len(key) != 16:
+	print 'ERROR: password is not 16 characters long'
+	sys.exit()
+
+fname = sys.argv[4]
 
 #generate rsa key pair ans save to files
 rsa_keys = RSA.generate(2048)
@@ -32,14 +50,6 @@ privkey = rsa_keys.exportKey("PEM")
 with open('c_privkey.pem', 'w') as f:
 	f.write(privkey)
 
-key = 'a1b2c3d4e5f6g7h9' #sys.argv[3]
-if len(key) != 16:
-	print 'ERROR: password not 16 characters'
-	sys.exit()
-
-fname = 'file1.txt' #sys.argv[4]
-ename = 'en' + fname
-
 def encrypt_key():
 	with open('s_pubkey.pem', 'r') as f:
 		k = f.read()
@@ -47,51 +57,42 @@ def encrypt_key():
 	encrypted = server_key.encrypt(key, 16)
 	return encrypted
 
-#set up AES encryption
-iv = urandom(BLOCK_SIZE)
-mode = AES.MODE_CBC
-
+#encrypt the file using AES cipher in CBC mode
+#read entire plaintext
+#calculate original size and remainder when modding using blcok size
+#pad the plaintext with null chars 
+#prepend the ciphertext with original size and iv
+#encrypt plaintext and append to ciiphertext
 def encrypt_file():
 	encryptor = AES.new(key, mode, iv)
 	with open(fname, 'rb') as f:
 		plaintext = f.read()
-	S = len(plaintext)
-	L = S % BLOCK_SIZE
-	if L < 16:
-		plaintext+=' '*(16-L)
-	length = str(S) + ' '*(16-len(str(S)))
+	size = len(plaintext)
+	rem = size % BLOCK_SIZE
+	if rem < BLOCK_SIZE:
+		plaintext+=' '*(BLOCK_SIZE-rem)
+	length = str(size) + ' '*(BLOCK_SIZE-len(str(size)))
 	ciphertext = length + iv
 	ciphertext += encryptor.encrypt(plaintext)
 	return ciphertext
 
+#hash the file using SHA 256
+#return the hash object
 def hash_file():
 	with open(fname, 'rb') as f:
 		plaintext = f.read()
 	h = SHA256.new(plaintext)
-	print h.hexdigest()
 	return h
 
+#encrypt the hash using RSA private key
+#return the encrypted hash
 def encrypt_hash(hash):
 	with open('c_privkey.pem', 'r') as f:
 		pk = f.read()
 		pk = RSA.importKey(pk)
 	enhash = pk.encrypt(hash.hexdigest(), 32)
 	return enhash
-"""
-def decrypt_hash(enc):
-	with open('c_privkey.pem', 'r') as f:
-		pk = f.read()
-		pk = RSA.importKey(pk)
-	dehash = pk.decrypt(enc)
-	return dehash
 
-h = hash_file()
-x = encrypt_hash(h)
-print x
-y = decrypt_hash(x)
-print y
-
-"""
 #set up client socket
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -103,6 +104,8 @@ except:
 	print "no server on host/port"
 	sys.exit()
 
+#failsafe in case client doesnt disconnect
+#prevents resending file, signature and key to server
 sent = False
 
 #handle data sent from server
@@ -113,6 +116,9 @@ while 1:
 		for sock in read:
 			if sock == client:
 				data = sock.recv(SIZE)
+				#if there is data it should be the 'connected' respons
+				#client prints message and begins transmitting to server
+				#sends the encrypted key, encrypted file, and signature
 				if data:
 					print data
 					if sent == False:
@@ -121,12 +127,13 @@ while 1:
 						ek = pickle.dumps(ek)
 						sock.send(ek)
 						ctxt = encrypt_file()
+						time.sleep(1)
 						sock.send('file')
 						sock.send(ctxt)
+						time.sleep(1)
 						sock.send('signature')
 						h = hash_file()
 						enchash = encrypt_hash(h)
-						print enchash
 						enchash = pickle.dumps(enchash)
 						sock.send(enchash)
 						sent == True
