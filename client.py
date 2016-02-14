@@ -79,16 +79,14 @@ def hash_file():
 	h = SHA256.new(plaintext)
 	return h
 
-#encrypt the hash using RSA private key
+#sign the hash using RSA private key
 #return the encrypted hash
 def encrypt_hash(hash):
 	with open('c_privkey.pem', 'r') as f:
 		pk = RSA.importKey(f.read())
 	signer = PKCS1_v1_5.new(pk)
 	sig = signer.sign(hash)
-	return sig
-
-	
+	return sig	
 
 #set up client socket
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
