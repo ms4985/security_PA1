@@ -16,7 +16,7 @@ BLOCK_SIZE = 16
 iv = urandom(BLOCK_SIZE)
 mode = AES.MODE_CBC
 
-#CHANGE WHEN ADDING REST OF INPUT ARGS
+#check number of arguments
 if len(sys.argv) != 5:
 	print 'ERROR: not enough arguments'
 	sys.exit()
@@ -40,15 +40,6 @@ if len(key) != 16:
 	sys.exit()
 
 fname = sys.argv[4]
-
-#generate rsa key pair ans save to files
-rsa_keys = RSA.generate(2048)
-pubkey = rsa_keys.publickey().exportKey("PEM")
-with open('c_pubkey.pem', 'w') as f:
-	f.write(pubkey)
-privkey = rsa_keys.exportKey("PEM")
-with open('c_privkey.pem', 'w') as f:
-	f.write(privkey)
 
 def encrypt_key():
 	with open('s_pubkey.pem', 'r') as f:
@@ -137,7 +128,7 @@ while 1:
 						enchash = pickle.dumps(enchash)
 						sock.send(enchash)
 						sent == True
-
+						sys.exit()
 				#exit if server quit
 				else:
 					print "server disconnected"

@@ -27,15 +27,6 @@ if ((mode != 't') and (mode != 'u')):
 	print 'ERROR: invalid mode'
 	sys.exit()
 
-#generate rsa key pairs and save to files
-rsa_keys = RSA.generate(2048)
-pubkey = rsa_keys.publickey().exportKey("PEM")
-with open('s_pubkey.pem', 'w') as f:
-	f.write(pubkey)
-privkey = rsa_keys.exportKey("PEM")
-with open('s_privkey.pem', 'w') as f:
-	f.write(privkey)
-
 #set up server socket
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((host,port))
@@ -87,6 +78,9 @@ def handle_file(sock):
 	if mode == 'u':
 		with open('fakefile', 'rb') as f:
 			ctxt = f.read()
+	if (len(ctxt) % BLOCK_SIZE) != 0:
+		plain = 'ERROR'
+		return
 	plain = decryptor.decrypt(ctxt)
 	plain = plain[:int(size)]
 	with open('decryptedfile', 'wb') as f:
@@ -95,6 +89,9 @@ def handle_file(sock):
 def handle_sig():
 	data = sock.recv(SIZE)
 	data = pickle.loads(data)
+	if plain == 'ERROR':
+		print 'Verification Failed'
+		return
 	with open('c_privkey.pem', 'r') as f:
 		pk = f.read()
 		pk = RSA.importKey(pk)
@@ -130,3 +127,6 @@ except (KeyboardInterrupt, SystemExit):
 	print "\nserver shutting down..."
 	server.close()
 	sys.exit()
+
+server.close()
+sys.exit()
