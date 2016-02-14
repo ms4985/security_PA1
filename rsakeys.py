@@ -1,3 +1,6 @@
+# Megan Skrypek
+# ms4985
+
 from Crypto.PublicKey import RSA
 
 #SERVER:

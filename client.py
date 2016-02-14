@@ -1,3 +1,6 @@
+# Megan Skrypek
+# ms4985
+
 from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256

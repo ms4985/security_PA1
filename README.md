@@ -22,3 +22,4 @@ Additional Notes:
 - 'decrypedfile' only gets written to in trusted mode
 - the rsa keys are generated and written to four separate files and the client and server have the names of those files hardcoded in
 - client will exit on its own, but the server will only exit using 'crtl-c'
+- after client disconnects, the server doesnt respond correctly upon reconnection, the server needs to exit and restart in order to run another client
