@@ -1,6 +1,7 @@
 from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
+from Crypto.Signature import PKCS1_v1_5
 import socket
 import sys
 import select
@@ -44,8 +45,8 @@ def handle_client(sock, address):
 		#client has exited so cleanup
 		if data == 'bye':
 			connections.remove(sock)
-			sock.close()
 			print 'client disconnected'
+			sock.close()
 		#client is about to send the key
 		if data == 'key':
 			handle_key(sock)
@@ -59,6 +60,9 @@ def handle_client(sock, address):
 		#no data received by client so move on
 		pass
 
+#load key data using pickle module
+#import servers private key
+#decrypt key from client using private key
 def handle_key(sock):
 	data = sock.recv(SIZE)
 	data = pickle.loads(data)
@@ -68,6 +72,12 @@ def handle_key(sock):
 		pk = RSA.importKey(p)
 	KEY = pk.decrypt(data)
 
+#receive file from client
+#parse original size of plaintext
+#parse iv and use for decryptor
+#if untrusted mode, read from fakefile and use as plaintext
+#	if fakefile is not padded, verfication failed
+#if trusted mode, decrypt plaintext and save to file
 def handle_file(sock):
 	ctxt = sock.recv(SIZE)
 	size = ctxt[:BLOCK_SIZE]
@@ -86,47 +96,47 @@ def handle_file(sock):
 	with open('decryptedfile', 'wb') as f:
 		f.write(plain)
 
+#receive signature from client
+#check if plaintext is valid, if not return
+#import clients public key and use to decrypt signature
+#hash the plaintext and compare with signature
+#if equal, verification passed, if not, failed
 def handle_sig():
 	data = sock.recv(SIZE)
 	data = pickle.loads(data)
 	if plain == 'ERROR':
 		print 'Verification Failed'
 		return
-	with open('c_privkey.pem', 'r') as f:
-		pk = f.read()
-		pk = RSA.importKey(pk)
-	dehash = pk.decrypt(data)
+	with open('c_pubkey.pem', 'r') as f:
+		pk = RSA.importKey(f.read())
 	h = SHA256.new(plain)
-	if (h.hexdigest() == dehash):
+	verifier = PKCS1_v1_5.new(pk)
+	if (verifier.verify(h, data) == True):
 		print 'Verification Passed'
 	else:
 		print 'Verficiation Failed'
-		
 
-def close(socket):
-	print 'close'
-	connections.remove(socket)
-	socket.close()
-
+#handle data send from client connections		
 try:
 	while 1:
 		read, write, error = select.select(connections, [], [])
 		for sock in read:
 			if sock == server:
+				#accept incoming connections
 				socket, address = server.accept()
 				socket.sendto("connected!", address)
 				connections.append(socket)
 				print 'client connected'
 			else:
 				try:
+					#client helper function
 					handle_client(socket, address)
 				except:
+					#client has disconnected
 					sock.close()
-
+#catch ctrl-c interrupts
 except (KeyboardInterrupt, SystemExit):
 	print "\nserver shutting down..."
 	server.close()
 	sys.exit()
 
-server.close()
-sys.exit()

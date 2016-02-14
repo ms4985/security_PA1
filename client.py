@@ -1,6 +1,7 @@
 from Crypto.Cipher import AES
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
+from Crypto.Signature import PKCS1_v1_5
 import socket
 import sys
 import select
@@ -79,10 +80,12 @@ def hash_file():
 #return the encrypted hash
 def encrypt_hash(hash):
 	with open('c_privkey.pem', 'r') as f:
-		pk = f.read()
-		pk = RSA.importKey(pk)
-	enhash = pk.encrypt(hash.hexdigest(), 32)
-	return enhash
+		pk = RSA.importKey(f.read())
+	signer = PKCS1_v1_5.new(pk)
+	sig = signer.sign(hash)
+	return sig
+
+	
 
 #set up client socket
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -124,9 +127,9 @@ while 1:
 						time.sleep(1)
 						sock.send('signature')
 						h = hash_file()
-						enchash = encrypt_hash(h)
-						enchash = pickle.dumps(enchash)
-						sock.send(enchash)
+						signature = encrypt_hash(h)
+						signature = pickle.dumps(signature)
+						sock.send(signature)
 						sent == True
 						sys.exit()
 				#exit if server quit
