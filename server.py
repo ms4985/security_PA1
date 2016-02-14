@@ -102,7 +102,8 @@ def handle_file(sock):
 #receive signature from client
 #check if plaintext is valid, if not return
 #import clients public key and use to decrypt signature
-#hash the plaintext and compare with signature
+#hash the plaintext 
+#generate a verifier and compare with the hash
 #if equal, verification passed, if not, failed
 def handle_sig():
 	data = sock.recv(SIZE)
@@ -137,7 +138,7 @@ try:
 				except:
 					#client has disconnected
 					sock.close()
-#catch ctrl-c interrupts
+#catch ctrl-c interrupts to exit
 except (KeyboardInterrupt, SystemExit):
 	print "\nserver shutting down..."
 	server.close()
